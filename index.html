@@ -1,9 +1,468 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Hello</title>
-  </head>
-  <body>
-    <button>HELLO</button>
-  </body>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Watch Party (No-Server)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, Noto Sans KR, sans-serif; background:#0b0f19; color:#e7eaf3; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .card { background:#121a2a; border:1px solid #1f2a44; border-radius: 16px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .row { display:flex; gap:12px; flex-wrap: wrap; }
+    .col { flex:1; min-width: 280px; }
+    h1 { margin: 8px 0 14px; font-size: 20px; }
+    label { display:block; font-size: 12px; opacity:.9; margin-bottom: 6px; }
+    input, button, select { width:100%; box-sizing:border-box; padding: 10px 12px; border-radius: 12px; border:1px solid #2b3a5f; background:#0e1526; color:#e7eaf3; }
+    button { cursor:pointer; background:#1a2e55; border-color:#2f4f94; font-weight: 700; }
+    button:hover { filter: brightness(1.08); }
+    .muted { opacity:.75; font-size: 12px; }
+    .topbar { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
+    .pill { padding:6px 10px; border-radius: 999px; border:1px solid #2b3a5f; background:#0e1526; font-size:12px; }
+    .hidden { display:none !important; }
+    #playerWrap { aspect-ratio: 16/9; width:100%; border-radius: 16px; overflow:hidden; border:1px solid #1f2a44; background:#000; }
+    #player { width:100%; height:100%; }
+    .controls { display:flex; gap:10px; flex-wrap: wrap; margin-top: 10px; align-items:center; }
+    .controls button { width:auto; padding: 10px 12px; }
+    .controls .small { width:auto; min-width: 120px; }
+    .chatBox { height: 380px; overflow:auto; padding: 10px; border-radius: 16px; border:1px solid #1f2a44; background:#0e1526; }
+    .msg { margin: 8px 0; padding: 8px 10px; border-radius: 12px; background:#121a2a; border:1px solid #1f2a44; }
+    .msg .meta { font-size: 11px; opacity:.75; margin-bottom: 4px; }
+    .msg .txt { white-space: pre-wrap; word-break: break-word; }
+    .chatInput { display:flex; gap:10px; margin-top: 10px; }
+    .chatInput input { flex:1; }
+    .chatInput button { width: 120px; }
+    .hr { height:1px; background:#1f2a44; margin: 12px 0; }
+    a { color:#9fc2ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <h1>🎬 Watch Party (GitHub Pages · No Server)</h1>
+      <div id="status" class="pill">상태: 대기</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="loginCard" class="card">
+      <div class="row">
+        <div class="col">
+          <label>방 코드 (예: ABC123)</label>
+          <input id="roomCode" placeholder="같이 볼 방 코드" maxlength="32" />
+          <div class="muted">※ 이 코드는 “비밀번호”가 아니라 방 구분용이야. (서버가 없어서 보안 로그인은 불가)</div>
+        </div>
+        <div class="col">
+          <label>닉네임</label>
+          <input id="nickname" placeholder="예: Min" maxlength="16" />
+          <div class="muted">같은 브라우저 탭들끼리만 채팅/동기화가 공유돼.</div>
+        </div>
+        <div class="col" style="display:flex; align-items:end;">
+          <button id="enterBtn">입장하기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- APP -->
+    <div id="app" class="row hidden" style="margin-top:12px;">
+      <!-- LEFT: VIDEO -->
+      <div class="col">
+        <div class="card">
+          <div class="row">
+            <div class="col">
+              <label>유튜브 링크 또는 ID</label>
+              <input id="ytInput" placeholder="https://www.youtube.com/watch?v=... 또는 영상 ID" />
+              <div class="muted">예: https://youtu.be/dQw4w9WgXcQ</div>
+            </div>
+            <div class="col" style="display:flex; align-items:end;">
+              <button id="loadBtn">영상 로드</button>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div id="playerWrap">
+            <div id="player"></div>
+          </div>
+
+          <div class="controls">
+            <button id="playBtn">▶️ 재생</button>
+            <button id="pauseBtn">⏸️ 일시정지</button>
+
+            <label class="muted" style="margin:0;">점프(초)</label>
+            <input id="seekSec" class="small" type="number" value="10" min="1" max="600" />
+            <button id="backBtn">⏪ -</button>
+            <button id="fwdBtn">⏩ +</button>
+
+            <label class="muted" style="margin:0;">속도</label>
+            <select id="speedSel" class="small">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+            </select>
+
+            <div class="pill" id="roomPill"></div>
+          </div>
+
+          <div class="muted" style="margin-top:8px;">
+            동기화: 재생/정지/점프/속도/영상ID 공유 (같은 브라우저 탭들끼리)
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: CHAT -->
+      <div class="col">
+        <div class="card">
+          <div class="topbar" style="margin-bottom:8px;">
+            <div class="pill">💬 채팅</div>
+            <button id="leaveBtn" style="width:auto;">나가기</button>
+          </div>
+
+          <div id="chatBox" class="chatBox"></div>
+
+          <div class="chatInput">
+            <input id="chatText" placeholder="메시지 입력..." />
+            <button id="sendBtn">보내기</button>
+          </div>
+
+          <div class="muted" style="margin-top:8px;">
+            여러 사람이 “진짜로” 같이 하려면 Firebase/서버가 필요해. 원하면 그 버전으로 만들어줄게.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- YouTube IFrame API -->
+  <script>
+    // --- Utils ---
+    function nowTime() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    function parseYouTubeId(input) {
+      if (!input) return null;
+      const s = input.trim();
+
+      // If already looks like ID
+      if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+
+      // Try URL patterns
+      try {
+        const url = new URL(s);
+        if (url.hostname.includes("youtu.be")) {
+          const id = url.pathname.replace("/", "");
+          if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+        }
+        if (url.hostname.includes("youtube.com")) {
+          const v = url.searchParams.get("v");
+          if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+
+          // /shorts/ID
+          const m = url.pathname.match(/\/shorts\/([a-zA-Z0-9_-]{11})/);
+          if (m) return m[1];
+
+          // /embed/ID
+          const e = url.pathname.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+          if (e) return e[1];
+        }
+      } catch (_) {}
+
+      return null;
+    }
+
+    function safeRoomKey(code) {
+      return code.trim().replace(/\s+/g, "_").toUpperCase();
+    }
+
+    // --- UI refs ---
+    const loginCard = document.getElementById("loginCard");
+    const app = document.getElementById("app");
+    const status = document.getElementById("status");
+
+    const roomCodeEl = document.getElementById("roomCode");
+    const nicknameEl = document.getElementById("nickname");
+    const enterBtn = document.getElementById("enterBtn");
+
+    const ytInput = document.getElementById("ytInput");
+    const loadBtn = document.getElementById("loadBtn");
+
+    const playBtn = document.getElementById("playBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const backBtn = document.getElementById("backBtn");
+    const fwdBtn = document.getElementById("fwdBtn");
+    const seekSec = document.getElementById("seekSec");
+    const speedSel = document.getElementById("speedSel");
+    const roomPill = document.getElementById("roomPill");
+
+    const chatBox = document.getElementById("chatBox");
+    const chatText = document.getElementById("chatText");
+    const sendBtn = document.getElementById("sendBtn");
+    const leaveBtn = document.getElementById("leaveBtn");
+
+    // --- Room state ---
+    let roomKey = null;
+    let nick = null;
+    let bc = null;
+
+    // --- YouTube Player ---
+    let player = null;
+    let ytReady = false;
+
+    // Prevent infinite echo: each tab has unique id
+    const tabId = crypto.randomUUID();
+
+    // Sync throttling
+    let lastSyncSentAt = 0;
+
+    // --- Chat ---
+    function addChatMessage({ type="chat", nick, text, time, system=false }) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = system ? `[${time}] 시스템` : `[${time}] ${nick}`;
+      const txt = document.createElement("div");
+      txt.className = "txt";
+      txt.textContent = text;
+      div.appendChild(meta);
+      div.appendChild(txt);
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // --- Broadcast ---
+    function postToRoom(payload) {
+      if (!bc) return;
+      bc.postMessage({
+        ...payload,
+        roomKey,
+        fromTabId: tabId
+      });
+    }
+
+    function handleIncoming(msg) {
+      // Ignore other rooms
+      if (!msg || msg.roomKey !== roomKey) return;
+      // Ignore self
+      if (msg.fromTabId === tabId) return;
+
+      if (msg.kind === "chat") {
+        addChatMessage({ nick: msg.nick, text: msg.text, time: msg.time });
+        return;
+      }
+
+      if (msg.kind === "system") {
+        addChatMessage({ system:true, text: msg.text, time: msg.time });
+        return;
+      }
+
+      if (!player) return;
+
+      // Video control sync
+      if (msg.kind === "loadVideo") {
+        if (msg.videoId) {
+          player.loadVideoById(msg.videoId, msg.at || 0);
+          if (typeof msg.rate === "number") player.setPlaybackRate(msg.rate);
+          addChatMessage({ system:true, text:`영상 로드: ${msg.videoId}`, time: msg.time });
+        }
+        return;
+      }
+
+      if (msg.kind === "play") {
+        player.playVideo();
+        return;
+      }
+      if (msg.kind === "pause") {
+        player.pauseVideo();
+        return;
+      }
+      if (msg.kind === "seek") {
+        player.seekTo(msg.to || 0, true);
+        return;
+      }
+      if (msg.kind === "rate") {
+        player.setPlaybackRate(msg.rate || 1);
+        return;
+      }
+    }
+
+    // --- YouTube API loader ---
+    window.onYouTubeIframeAPIReady = function() {
+      ytReady = true;
+      status.textContent = "상태: 유튜브 준비됨";
+    };
+
+    (function loadYT() {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+    })();
+
+    function ensurePlayer(videoId) {
+      return new Promise((resolve) => {
+        const tryMake = () => {
+          if (!ytReady) return setTimeout(tryMake, 50);
+
+          if (player) {
+            resolve(player);
+            return;
+          }
+
+          player = new YT.Player("player", {
+            videoId: videoId || undefined,
+            playerVars: {
+              rel: 0,
+              modestbranding: 1
+            },
+            events: {
+              onReady: () => resolve(player)
+            }
+          });
+        };
+        tryMake();
+      });
+    }
+
+    // --- Enter / Leave ---
+    function enterRoom() {
+      const code = safeRoomKey(roomCodeEl.value);
+      const n = nicknameEl.value.trim() || "익명";
+
+      if (!code) {
+        alert("방 코드를 입력해줘!");
+        return;
+      }
+
+      roomKey = code;
+      nick = n;
+
+      // Broadcast channel for this room
+      bc = new BroadcastChannel("watchparty_" + roomKey);
+      bc.onmessage = (e) => handleIncoming(e.data);
+
+      // UI
+      loginCard.classList.add("hidden");
+      app.classList.remove("hidden");
+      roomPill.textContent = `방: ${roomKey} · 닉: ${nick}`;
+      status.textContent = "상태: 방 입장";
+
+      // System join message
+      addChatMessage({ system:true, text:`${nick} 입장`, time: nowTime() });
+      postToRoom({ kind:"system", time: nowTime(), text: `${nick} 입장` });
+
+      // Create player (empty)
+      ensurePlayer().then(() => {});
+    }
+
+    function leaveRoom() {
+      if (bc) {
+        postToRoom({ kind:"system", time: nowTime(), text: `${nick} 퇴장` });
+        bc.close();
+      }
+      bc = null;
+      roomKey = null;
+      nick = null;
+
+      // reset UI
+      app.classList.add("hidden");
+      loginCard.classList.remove("hidden");
+      chatBox.innerHTML = "";
+      status.textContent = "상태: 대기";
+    }
+
+    // --- Video actions ---
+    async function loadVideo(broadcast=true) {
+      const id = parseYouTubeId(ytInput.value);
+      if (!id) {
+        alert("유효한 유튜브 링크 또는 11자리 영상 ID를 넣어줘!");
+        return;
+      }
+
+      await ensurePlayer(id);
+
+      const rate = Number(speedSel.value) || 1;
+      player.loadVideoById(id, 0);
+      player.setPlaybackRate(rate);
+
+      addChatMessage({ system:true, text:`영상 로드: ${id}`, time: nowTime() });
+
+      if (broadcast) {
+        postToRoom({ kind:"loadVideo", time: nowTime(), videoId: id, at: 0, rate });
+      }
+    }
+
+    function play(broadcast=true) {
+      if (!player) return;
+      player.playVideo();
+      if (broadcast) postToRoom({ kind:"play" });
+    }
+
+    function pause(broadcast=true) {
+      if (!player) return;
+      player.pauseVideo();
+      if (broadcast) postToRoom({ kind:"pause" });
+    }
+
+    function seekBy(deltaSec, broadcast=true) {
+      if (!player) return;
+      const cur = player.getCurrentTime?.() || 0;
+      const to = Math.max(0, cur + deltaSec);
+      player.seekTo(to, true);
+      if (broadcast) postToRoom({ kind:"seek", to });
+    }
+
+    function setRate(broadcast=true) {
+      if (!player) return;
+      const rate = Number(speedSel.value) || 1;
+      player.setPlaybackRate(rate);
+      if (broadcast) postToRoom({ kind:"rate", rate });
+    }
+
+    // --- Chat send ---
+    function sendChat() {
+      const t = chatText.value.trim();
+      if (!t) return;
+      const time = nowTime();
+      addChatMessage({ nick, text: t, time });
+      postToRoom({ kind:"chat", nick, text: t, time });
+      chatText.value = "";
+      chatText.focus();
+    }
+
+    // --- Wiring ---
+    enterBtn.addEventListener("click", enterRoom);
+    leaveBtn.addEventListener("click", leaveRoom);
+
+    loadBtn.addEventListener("click", () => loadVideo(true));
+    playBtn.addEventListener("click", () => play(true));
+    pauseBtn.addEventListener("click", () => pause(true));
+
+    backBtn.addEventListener("click", () => {
+      const s = Number(seekSec.value) || 10;
+      seekBy(-s, true);
+    });
+    fwdBtn.addEventListener("click", () => {
+      const s = Number(seekSec.value) || 10;
+      seekBy(+s, true);
+    });
+
+    speedSel.addEventListener("change", () => setRate(true));
+
+    sendBtn.addEventListener("click", sendChat);
+    chatText.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendChat();
+    });
+
+    // Enter with Enter key
+    roomCodeEl.addEventListener("keydown", (e) => { if (e.key === "Enter") enterRoom(); });
+    nicknameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") enterRoom(); });
+  </script>
+</body>
 </html>
